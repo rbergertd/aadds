@@ -2,26 +2,29 @@
     "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
     "contentVersion": "1.0.0.0",
     "parameters": {
-        "domainConfigurationType": {
+        "tenantAdministrator": {
             "type": "string"
         },
         "domainName": {
             "type": "string"
         },
-        "filteredSync": {
+        "addBastionHost":{
+            "type":"string"
+        },
+        "vnetResourceGroup": {
             "type": "string"
         },
         "location": {
             "type": "string"
         },
+        "domainConfigurationType": {
+            "type": "string"
+        },
         "notificationSettings": {
             "type": "object"
         },
-        "vnetResourceGroup": {
+        "filteredSync": {
             "type": "string"
-        },
-        "addBastionHost":{
-            "type":"string"
         }
 
     },
@@ -164,7 +167,7 @@
             "properties": {
                 "mode": "Incremental",
                 "templateLink": {
-                    "uri": "https://raw.githubusercontent.com/rbergertd/wvd/master/ad%20on%20wvd/aadds-update-vnet-dns_v2.json",
+                    "uri": "https://raw.githubusercontent.com/rbergertd/aadds/master/nested/aadds-update-vnet-dns_v2.json",
                     "contentVersion": "1.0.0.0"
                 },
                 "parameters": {
@@ -212,7 +215,7 @@
             "properties": {
                 "mode": "Incremental",
                 "templateLink": {
-                    "uri": "https://raw.githubusercontent.com/rbergertd/wvd/master/ad%20on%20wvd/aadds-update-vnet-dns-bastion_v2.json",
+                    "uri": "https://raw.githubusercontent.com/rbergertd/aadds/master/nested/aadds-update-vnet-dns-bastion_v2.json",
                     "contentVersion": "1.0.0.0"
                 },
                 "parameters": {
