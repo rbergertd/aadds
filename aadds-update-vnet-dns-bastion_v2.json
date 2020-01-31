@@ -1,0 +1,142 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "virtualNetworkName": {
+            "type": "string",
+            "metadata": {
+                "description": "The name of the Virtual Network to Create"
+            },
+            "defaultValue": "AADDS-VNet"
+
+        },
+        "vnetResourceGroup": {
+            "type": "string",
+            "metadata": {
+                "description": "The resource group name of the VNet."
+            },
+            "defaultValue": "AutoDeskOnWVD6"
+
+        },
+        "virtualNetworkAddressRange": {
+            "type": "string",
+            "metadata": {
+                "description": "The address range of the new VNET in CIDR format"
+            },
+            "defaultValue": "10.0.0.0/16"
+        },
+        "subnetName": {
+            "type": "string",
+            "metadata": {
+                "description": "The name of the subnet created in the new VNET"
+            },
+            "defaultValue": "DomainServices"
+
+        },
+        "workloadsSubnetName": {
+            "type": "string",
+            "metadata": {
+                "description": "The name of the workloads subnet created in the new VNET"
+            },
+            "defaultValue": "Workloads"
+
+        },
+        "azureBastionSubnetName": {
+            "type": "string",
+            "metadata": {
+                "description": "The name of the azureBsastion subnet created in the new VNET"
+            },
+            "defaultValue": "AzureBastionSubnet"
+        },
+        "subnetRange": {
+            "type": "string",
+            "metadata": {
+                "description": "The address range of the subnet created in the new VNET"
+            },
+            "defaultValue": "10.0.0.0/24"
+        },
+        "workloadsSubnetRange": {
+            "type": "string",
+            "metadata": {
+                "description": "The address range of the subnet created in the new VNET"
+            },
+            "defaultValue": "10.0.1.0/24"
+        },
+        "bastionSubnetRange": {
+            "type": "string",
+            "metadata": {
+                "description": "The address range of the subnet created in the new VNET"
+            },
+            "defaultValue": "10.0.2.0/27"
+        },
+        "DNSServerAddress": {
+            "type": "array",
+            "metadata": {
+                "description": "The DNS address(es) of the DNS Server(s) used by the VNET"
+            },
+            "defaultValue": [
+                "10.0.0.4",
+                "10.0.0.5"
+            ]
+
+        },
+        "nsgName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the NSG to apply to Domain Services subnet"
+            },
+            "defaultValue": "AADDS-NSG"
+        },
+        "location": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().location]",
+            "metadata": {
+                "description": "Location for all resources."
+            }
+        }
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Network/virtualNetworks",
+            "name": "[parameters('virtualNetworkName')]",
+            "location": "[parameters('location')]",
+            "apiVersion": "2018-04-01",
+            "dependsOn": [
+            ],
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "[parameters('virtualNetworkAddressRange')]"
+                    ]
+                },
+                "dhcpOptions": {
+                    "dnsServers": "[parameters('DNSServerAddress')]"
+                },
+                "subnets": [
+                    {
+                        "name": "[parameters('subnetName')]",
+                        "properties": {
+                            "addressPrefix": "[parameters('subnetRange')]",
+                            "networkSecurityGroup": {
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', parameters('vnetResourceGroup'), '/providers/Microsoft.Network/NetworkSecurityGroups/', parameters('nsgName'))]"
+                            }
+                        }
+                    },
+                    {
+                        "name": "[parameters('workloadsSubnetName')]",
+                        "properties": {
+                            "addressPrefix": "[parameters('workloadsSubnetRange')]"
+                        }
+                    },
+                    {
+                        "name": "[parameters('azureBastionSubnetName')]",
+                        "properties": {
+                            "addressPrefix": "[parameters('bastionSubnetRange')]"
+                        }
+                    }
+                ]
+
+            }
+        }
+    ]
+}

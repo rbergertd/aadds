@@ -1,0 +1,305 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "domainConfigurationType": {
+            "type": "string"
+        },
+        "domainName": {
+            "type": "string"
+        },
+        "filteredSync": {
+            "type": "string"
+        },
+        "location": {
+            "type": "string"
+        },
+        "notificationSettings": {
+            "type": "object"
+        },
+        "vnetResourceGroup": {
+            "type": "string"
+        },
+        "addBastionHost":{
+            "type":"string"
+        }
+
+    },
+    "variables": {
+        "nsgName": "AADDS-NSG",
+        "subnetName": "DomainServices",
+        "workloadsSubnetName": "Workloads",
+        "vnetName": "AADDS-VNet",
+        "bastionSubnetName": "AzureBastionSubnet",
+        "vnetAddressRange": "10.0.0.0/16",
+        "subnet1AddressRange": "10.0.0.0/24",
+        "subnet2AddressRange": "10.0.1.0/24",
+        "subnet3AddressRange": "10.0.2.0/27",
+        "bastionHostName": "AzureBastionHost",
+        "bastionPipName": "bastionHost-pip"
+
+    },
+    "resources": [
+        {
+            "apiVersion": "2017-06-01",
+            "type": "Microsoft.AAD/DomainServices",
+            "name": "[parameters('domainName')]",
+            "location": "[parameters('location')]",
+            "dependsOn": [
+                "[concat('Microsoft.Network/virtualNetworks/', variables('vnetName'))]",
+                "[concat('Microsoft.Network/virtualNetworks/', variables('vnetName'), '/subnets/', variables ('subnetName'))]"
+            ],
+            "properties": {
+                "domainName": "[parameters('domainName')]",
+                "subnetId": "[concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', parameters('vnetResourceGroup'), '/providers/Microsoft.Network/virtualNetworks/', variables('vnetName'), '/subnets/', variables('subnetName'))]",
+                "filteredSync": "[parameters('filteredSync')]",
+                "domainConfigurationType": "[parameters('domainConfigurationType')]",
+                "notificationSettings": "[parameters('notificationSettings')]"
+            }
+        },
+        {
+            "type": "Microsoft.Network/NetworkSecurityGroups",
+            "name": "[variables('nsgName')]",
+            "location": "[parameters('location')]",
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "AllowSyncWithAzureAD",
+                        "properties": {
+                            "access": "Allow",
+                            "priority": 101,
+                            "direction": "Inbound",
+                            "protocol": "Tcp",
+                            "sourceAddressPrefix": "AzureActiveDirectoryDomainServices",
+                            "sourcePortRange": "*",
+                            "destinationAddressPrefix": "*",
+                            "destinationPortRange": "443"
+                        }
+                    },
+                    {
+                        "name": "AllowPSRemoting",
+                        "properties": {
+                            "access": "Allow",
+                            "priority": 301,
+                            "direction": "Inbound",
+                            "protocol": "Tcp",
+                            "sourceAddressPrefix": "AzureActiveDirectoryDomainServices",
+                            "sourcePortRange": "*",
+                            "destinationAddressPrefix": "*",
+                            "destinationPortRange": "5986"
+                        }
+                    },
+                    {
+                        "name": "AllowRD",
+                        "properties": {
+                            "access": "Allow",
+                            "priority": 201,
+                            "direction": "Inbound",
+                            "protocol": "Tcp",
+                            "sourceAddressPrefix": "CorpNetSaw",
+                            "sourcePortRange": "*",
+                            "destinationAddressPrefix": "*",
+                            "destinationPortRange": "3389"
+                        }
+                    }
+                ]
+            },
+            "apiVersion": "2018-04-01"
+        },
+        {
+            "type": "Microsoft.Network/virtualNetworks",
+            "name": "[variables('vnetName')]",
+            "location": "[parameters('location')]",
+            "apiVersion": "2018-04-01",
+            "dependsOn": [
+                "[concat('Microsoft.Network/NetworkSecurityGroups/', variables('nsgName'))]"
+            ],
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "[variables('vnetAddressRange')]"
+                    ]
+                }
+            },
+            "resources": [
+                    {
+                        "apiVersion": "2018-04-01",
+                        "type": "subnets",
+                        "location": "[parameters('location')]",
+                        "dependsOn": [
+                            "[concat('Microsoft.Network/virtualNetworks/', variables('vnetName'))]",
+                            "[concat('Microsoft.Network/NetworkSecurityGroups/', variables('nsgName'))]"
+                        ],
+                        "name": "[variables('subnetName')]",
+                        "properties": {
+                            "addressPrefix": "[variables('subnet1AddressRange')]",
+                            "networkSecurityGroup": {
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', parameters('vnetResourceGroup'), '/providers/Microsoft.Network/NetworkSecurityGroups/', variables('nsgName'))]"
+                            }
+                        }
+                    },
+                    {
+                        "apiVersion": "2018-04-01",
+                        "type": "subnets",
+                        "location": "[parameters('location')]",
+                        "dependsOn": [
+                            "[concat('Microsoft.Network/virtualNetworks/', variables('vnetName'))]"
+                        ],
+                        "name": "[variables('workloadsSubnetName')]",
+                        "properties": {
+                            "addressPrefix": "[variables('subnet2AddressRange')]"
+                        }
+                    }
+
+                ]
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "name": "UpdateVNetDNS",
+            "apiVersion": "2016-02-01",
+            "condition": "[equals(parameters('addBastionHost'), 'No')]",
+            "dependsOn": [
+                "[concat('Microsoft.AAD/domainServices/', parameters('domainName'))]"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "https://raw.githubusercontent.com/rbergertd/wvd/master/ad%20on%20wvd/aadds-update-vnet-dns_v2.json",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "virtualNetworkName": {
+                        "value": "[variables('vnetName')]"
+                    },
+                    "vnetResourceGroup": {
+                        "value": "[parameters('vnetResourceGroup')]"
+                    },
+                    "virtualNetworkAddressRange": {
+                        "value": "[variables('vnetAddressRange')]"
+                    },
+                    "subnetName": {
+                        "value": "[variables('subnetName')]"
+                    },
+                    "workloadsSubnetName": {
+                        "value": "[variables('workloadsSubnetName')]"
+                    },
+                    "subnetRange": {
+                        "value": "[variables('subnet1AddressRange')]"
+                    },
+                    "workloadsSubnetRange": {
+                        "value": "[variables('subnet2AddressRange')]"
+                    },
+                    "nsgName": {
+                        "value": "[variables('nsgName')]"
+                    },
+                    "DNSServerAddress": {
+                        "value": [
+                            "10.0.0.4",
+                            "10.0.0.5"
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "name": "UpdateVNetDNSWithBastion",
+            "condition": "[equals(parameters('addBastionHost'), 'Yes')]",
+            "apiVersion": "2016-02-01",
+            "dependsOn": [
+                "[concat('Microsoft.AAD/domainServices/', parameters('domainName'))]"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "https://raw.githubusercontent.com/rbergertd/wvd/master/ad%20on%20wvd/aadds-update-vnet-dns-bastion_v2.json",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "virtualNetworkName": {
+                        "value": "[variables('vnetName')]"
+                    },
+                    "vnetResourceGroup": {
+                        "value": "[parameters('vnetResourceGroup')]"
+                    },
+                    "virtualNetworkAddressRange": {
+                        "value": "[variables('vnetAddressRange')]"
+                    },
+                    "subnetName": {
+                        "value": "[variables('subnetName')]"
+                    },
+                    "workloadsSubnetName": {
+                        "value": "[variables('workloadsSubnetName')]"
+                    },
+                    "azureBastionSubnetName":{
+                        "value": "[variables('bastionSubnetName')]"
+                    },
+                    "subnetRange": {
+                        "value": "[variables('subnet1AddressRange')]"
+                    },
+                    "workloadsSubnetRange": {
+                        "value": "[variables('subnet2AddressRange')]"
+                    },
+                    "bastionSubnetRange":{
+                        "value": "[variables('subnet3AddressRange')]"
+                    },
+                    "nsgName": {
+                        "value": "[variables('nsgName')]"
+                    },
+                    "DNSServerAddress": {
+                        "value": [
+                            "10.0.0.4",
+                            "10.0.0.5"
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "apiVersion": "2019-02-01",
+            "type": "Microsoft.Network/publicIpAddresses",
+            "condition": "[equals(parameters('addBastionHost'), 'Yes')]",
+            "name": "[variables('bastionPipName')]",
+            "location": "[parameters('location')]",
+            "sku": {
+                "name": "Standard"
+            },
+            "properties": {
+                "publicIPAllocationMethod": "Static"
+            }
+        },
+
+        {
+            "apiVersion": "2018-10-01",
+            "type": "Microsoft.Network/bastionHosts",
+            "condition": "[equals(parameters('addBastionHost'), 'Yes')]",
+            "name": "[variables('bastionHostName')]",
+            "location": "[parameters('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/publicIpAddresses', variables('bastionPipName'))]",
+                "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]",
+                "[concat('Microsoft.Resources/deployments/', 'UpdateVNetDNSWithBastion')]"
+
+                
+                
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "IpConf",
+                        "properties": {
+                            "subnet": {
+                                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('bastionSubnetName'))]"
+                            },
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIpAddresses', variables('bastionPipName'))]"
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    ],
+    "outputs": {
+    }
+}
